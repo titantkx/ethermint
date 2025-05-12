@@ -97,21 +97,24 @@ func (p Precompile) Prepare(
 	stateDB *statedb.StateDB,
 	s snapshot, //nolint:revive
 	method *abi.Method,
-	gasConfig storetypes.Gas,
+	initialGas storetypes.Gas,
+	initialGasLimit storetypes.Gas,
 	args []interface{},
 	err error,
 ) {
 	stateDB, ok := evm.StateDB.(*statedb.StateDB)
 	if !ok {
 		//nolint
-		return sdk.Context{}, nil, s, nil, uint64(0), nil, fmt.Errorf(ErrNotRunInEvm)
+		return sdk.Context{}, nil, s, nil, uint64(0), uint64(0), nil, fmt.Errorf(ErrNotRunInEvm)
 	}
 
 	// get the stateDB cache ctx
 	ctx, err = stateDB.GetCacheContext()
 	if err != nil {
-		return sdk.Context{}, nil, s, nil, uint64(0), nil, err
+		return sdk.Context{}, nil, s, nil, uint64(0), uint64(0), nil, err
 	}
+
+	initialGasLimit = ctx.GasMeter().Limit()
 
 	// take a snapshot of the current state before any changes
 	// to be able to revert the changes
@@ -121,7 +124,7 @@ func (p Precompile) Prepare(
 	// commit the current changes in the cache ctx
 	// to get the updated state for the precompile call
 	if err := stateDB.CommitWithCacheCtx(); err != nil {
-		return sdk.Context{}, nil, s, nil, uint64(0), nil, err
+		return sdk.Context{}, nil, s, nil, uint64(0), initialGasLimit, nil, err
 	}
 
 	// NOTE: This is a special case where the calling transaction does not specify a function name.
@@ -146,7 +149,7 @@ func (p Precompile) Prepare(
 	}
 
 	if err != nil {
-		return sdk.Context{}, nil, s, nil, uint64(0), nil, err
+		return sdk.Context{}, nil, s, nil, uint64(0), initialGasLimit, nil, err
 	}
 
 	// if the method type is `function` continue looking for arguments
@@ -154,12 +157,11 @@ func (p Precompile) Prepare(
 		argsBz := contract.Input[4:]
 		args, err = method.Inputs.Unpack(argsBz)
 		if err != nil {
-			return sdk.Context{}, nil, s, nil, uint64(0), nil, err
+			return sdk.Context{}, nil, s, nil, uint64(0), initialGasLimit, nil, err
 		}
 	}
 
-	initialGasLimit := ctx.GasMeter().Limit()
-	initialGas := ctx.GasMeter().GasConsumed()
+	initialGas = ctx.GasMeter().GasConsumed()
 
 	defer HandleGasError(ctx, contract, initialGas, initialGasLimit, &err)()
 
@@ -172,7 +174,7 @@ func (p Precompile) Prepare(
 	// we need to consume the gas that was already used by the EVM
 	ctx.GasMeter().ConsumeGas(initialGas, "creating a new gas meter")
 
-	return ctx, stateDB, s, method, initialGas, args, nil
+	return ctx, stateDB, s, method, initialGas, initialGasLimit, args, nil
 }
 
 // HandleGasError handles the out of gas panic by resetting the gas meter and returning an error.
@@ -187,7 +189,7 @@ func HandleGasError(ctx sdk.Context, contract *vm.Contract, initialGas storetype
 				_ = contract.UseGas(usedGas)
 
 				*err = vm.ErrOutOfGas
-				// FIXME: add InfiniteGasMeter with previous Gas limit.
+				// use InfiniteGasMeter with previous Gas limit.
 				ctx = ctx.WithGasMeter(types.NewInfiniteGasMeterWithLimit(initialGasLimit))
 				ctx.GasMeter().ConsumeGas(usedGas+initialGas, "change back to InfiniteGasMeter")
 			default:
@@ -207,14 +209,14 @@ func (p Precompile) Run(
 	readOnly bool,
 	isFromDelegateCall bool,
 ) (bz []byte, err error) {
-	ctx, stateDB, snapshot, method, initialGas, args, err := p.Prepare(evm, contract)
+	ctx, stateDB, snapshot, method, initialGas, initialGasLimit, args, err := p.Prepare(evm, contract)
 	if err != nil {
 		return nil, err
 	}
 
 	// This handles any out of gas errors that may occur during the execution of a precompile tx or query.
 	// It avoids panics and returns the out of gas error so the EVM can continue gracefully.
-	defer HandleGasError(ctx, contract, initialGas, ctx.GasMeter().Limit(), &err)()
+	defer HandleGasError(ctx, contract, initialGas, initialGasLimit, &err)()
 
 	// execute the precompile contract
 	bz, err = p.executor.Execute(ctx, stateDB, method, sender, callingContract, args, value, readOnly, isFromDelegateCall)
@@ -231,6 +233,8 @@ func (p Precompile) Run(
 	if err := p.AddJournalEntries(stateDB, snapshot); err != nil {
 		return nil, err
 	}
+
+	// @todo maybe we need to use InfiniteGasMeter with previous Gas limit here
 
 	return bz, nil
 }
