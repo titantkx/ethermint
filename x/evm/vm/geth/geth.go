@@ -16,8 +16,6 @@
 package geth
 
 import (
-	"math/big"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
@@ -44,10 +42,10 @@ func NewEVM(
 	stateDB vm.StateDB,
 	chainConfig *params.ChainConfig,
 	config vm.Config,
-	_ evm.PrecompiledContracts, // unused
+	customPrecompiled evm.PrecompiledContracts,
 ) evm.EVM {
 	return &EVM{
-		EVM: vm.NewEVM(blockCtx, txCtx, stateDB, chainConfig, config),
+		EVM: vm.NewEVM(blockCtx, txCtx, stateDB, chainConfig, config, customPrecompiled),
 	}
 }
 
@@ -66,29 +64,8 @@ func (e EVM) Config() vm.Config {
 	return e.EVM.Config
 }
 
-// Precompile returns the precompiled contract associated with the given address
-// and the current chain configuration. If the contract cannot be found it returns
-// nil.
-func (e EVM) Precompile(addr common.Address) (p vm.PrecompiledContract, found bool) {
-	precompiles := GetPrecompiles(e.ChainConfig(), e.EVM.Context.BlockNumber)
-	p, found = precompiles[addr]
-	return p, found
-}
-
 // ActivePrecompiles returns a list of all the active precompiled contract addresses
 // for the current chain configuration.
 func (EVM) ActivePrecompiles(rules params.Rules) []common.Address {
 	return vm.ActivePrecompiles(rules)
-}
-
-// RunPrecompiledContract runs a stateless precompiled contract and ignores the address and
-// value arguments. It uses the RunPrecompiledContract function from the geth vm package
-func (EVM) RunPrecompiledContract(
-	p evm.StatefulPrecompiledContract,
-	_ common.Address, // address arg is unused
-	input []byte,
-	suppliedGas uint64,
-	_ *big.Int, // 	value arg is unused
-) (ret []byte, remainingGas uint64, err error) {
-	return vm.RunPrecompiledContract(p, input, suppliedGas)
 }
