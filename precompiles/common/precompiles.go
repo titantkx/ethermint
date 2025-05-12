@@ -73,6 +73,18 @@ type Precompile struct {
 	executor PrecompileExecutor
 }
 
+func NewPrecompile(
+	abi abi.ABI,
+	address common.Address,
+	executor PrecompileExecutor,
+) *Precompile {
+	return &Precompile{
+		ABI:      abi,
+		address:  address,
+		executor: executor,
+	}
+}
+
 // RequiredGas calculates the base minimum required gas for a transaction or a query.
 func (p Precompile) RequiredGas(input []byte) uint64 {
 	if len(input) < 4 {
