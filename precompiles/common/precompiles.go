@@ -47,9 +47,9 @@ type snapshot struct {
 	Events     sdk.Events
 }
 
-// var _ vm.PrecompiledContract = &Precompile{}
-
 type PrecompileExecutor interface {
+	RequiredGas(input []byte, method *abi.Method) uint64
+
 	Execute(
 		ctx sdk.Context,
 		stateDB vm.StateDB,
@@ -63,6 +63,8 @@ type PrecompileExecutor interface {
 	) (ret []byte, err error)
 }
 
+var _ vm.PrecompiledContract = &Precompile{}
+
 type Precompile struct {
 	abi.ABI
 	address        common.Address
@@ -72,16 +74,18 @@ type Precompile struct {
 }
 
 // RequiredGas calculates the base minimum required gas for a transaction or a query.
-// It uses the method ID to determine if the input is a transaction or a query and
-// uses the Cosmos SDK gas config flat cost and the flat per byte cost * len(argBz) to calculate the gas.
-func (p Precompile) RequiredGas(input []byte, isTransaction bool) uint64 {
-	argsBz := input[4:]
-
-	if isTransaction {
-		return storetypes.KVGasConfig().WriteCostFlat + (storetypes.KVGasConfig().WriteCostPerByte * uint64(len(argsBz)))
+func (p Precompile) RequiredGas(input []byte) uint64 {
+	if len(input) < 4 {
+		return p.executor.RequiredGas(input, nil)
 	}
 
-	return storetypes.KVGasConfig().ReadCostFlat + (storetypes.KVGasConfig().ReadCostPerByte * uint64(len(argsBz)))
+	methodID := input[:4]
+	method, err := p.MethodById(methodID)
+	if err != nil {
+		return UnknownMethodCallGas
+	}
+
+	return p.executor.RequiredGas(input, method)
 }
 
 func (p Precompile) GetABI() abi.ABI {
@@ -127,27 +131,7 @@ func (p Precompile) Prepare(
 		return sdk.Context{}, nil, s, nil, uint64(0), initialGasLimit, nil, err
 	}
 
-	// NOTE: This is a special case where the calling transaction does not specify a function name.
-	// In this case we default to a `fallback` or `receive` function on the contract.
-
-	isEmptyCallData := len(contract.Input) == 0
-	isShortCallData := len(contract.Input) > 0 && len(contract.Input) < 4
-	isStandardCallData := len(contract.Input) >= 4
-
-	switch {
-	// Case 1: Calldata is empty
-	case isEmptyCallData:
-		method, err = p.emptyCallData(contract)
-
-	// Case 2: calldata is non-empty but less than 4 bytes needed for a method
-	case isShortCallData:
-		method, err = p.methodIDCallData()
-
-	// Case 3: calldata is non-empty and contains the minimum 4 bytes needed for a method
-	case isStandardCallData:
-		method, err = p.standardCallData(contract)
-	}
-
+	method, err = p.getMethod(contract)
 	if err != nil {
 		return sdk.Context{}, nil, s, nil, uint64(0), initialGasLimit, nil, err
 	}
@@ -274,6 +258,30 @@ func (p Precompile) Address() common.Address {
 
 func (p *Precompile) SetAddress(addr common.Address) {
 	p.address = addr
+}
+
+func (p Precompile) getMethod(contract *vm.Contract) (method *abi.Method, err error) {
+	// NOTE: This is a special case where the calling transaction does not specify a function name.
+	// In this case we default to a `fallback` or `receive` function on the contract.
+	isEmptyCallData := len(contract.Input) == 0
+	isShortCallData := len(contract.Input) > 0 && len(contract.Input) < 4
+	isStandardCallData := len(contract.Input) >= 4
+
+	switch {
+	// Case 1: Calldata is empty
+	case isEmptyCallData:
+		method, err = p.emptyCallData(contract)
+
+	// Case 2: calldata is non-empty but less than 4 bytes needed for a method
+	case isShortCallData:
+		method, err = p.methodIDCallData()
+
+	// Case 3: calldata is non-empty and contains the minimum 4 bytes needed for a method
+	case isStandardCallData:
+		method, err = p.standardCallData(contract)
+	}
+
+	return method, err
 }
 
 // emptyCallData is a helper function that returns the method to be called when the calldata is empty.
