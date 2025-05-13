@@ -62,6 +62,16 @@ func (k *Keeper) RefundGas(ctx sdk.Context, msg core.Message, leftoverGas uint64
 			err = errorsmod.Wrapf(errortypes.ErrInsufficientFunds, "fee collector account failed to refund fees: %s", err.Error())
 			return errorsmod.Wrapf(err, "failed to refund %d leftover gas (%s)", leftoverGas, refundedCoins.String())
 		}
+
+		// emit event for refund
+		events := sdk.Events{
+			sdk.NewEvent(
+				types.EventTypeRefund,
+				sdk.NewAttribute(sdk.AttributeKeyAmount, refundedCoins.String()),
+				sdk.NewAttribute(sdk.AttributeKeyFeePayer, msg.From().String()),
+			),
+		}
+		ctx.EventManager().EmitEvents(events)
 	default:
 		// no refund, consume gas and update the tx gas meter
 	}

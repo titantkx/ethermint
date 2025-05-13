@@ -240,7 +240,7 @@ func applyTransaction(
 
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
-	vmenv := ethvm.NewEVM(blockCtx, txCtx, vmdb, config, cfg)
+	vmenv := ethvm.NewEVM(blockCtx, txCtx, vmdb, config, cfg, nil)
 
 	// Apply the transaction to the current state (included in the env)
 	execResult, err := ethcore.ApplyMessage(vmenv, msg, gp)

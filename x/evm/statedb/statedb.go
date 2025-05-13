@@ -16,6 +16,7 @@
 package statedb
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"sort"
@@ -46,6 +47,11 @@ var _ vm.StateDB = &StateDB{}
 type StateDB struct {
 	keeper Keeper
 	ctx    sdk.Context
+	// cacheCtx is used on precompile calls. It allows to commit the current journal
+	// entries to get the updated state in for the precompile call.
+	cacheCtx sdk.Context
+	// writeCache function contains all the changes related to precompile calls.
+	writeCache func()
 
 	// Journal of state modifications. This is the backbone of
 	// Snapshot and RevertToSnapshot.
@@ -65,7 +71,15 @@ type StateDB struct {
 
 	// Per-transaction access list
 	accessList *accessList
+
+	// The count of calls to precompiles
+	precompileCallsCounter uint16
 }
+
+// MaxPrecompileCalls is the maximum number of precompile
+// calls within a transaction. We want to limit this because
+// for each precompile tx we're creating a cached context
+const MaxPrecompileCalls uint16 = 266
 
 // New creates a new state from a given trie.
 func New(ctx sdk.Context, keeper Keeper, txConfig TxConfig) *StateDB {
@@ -83,6 +97,47 @@ func New(ctx sdk.Context, keeper Keeper, txConfig TxConfig) *StateDB {
 // Keeper returns the underlying `Keeper`
 func (s *StateDB) Keeper() Keeper {
 	return s.keeper
+}
+
+// GetContext returns the transaction Context.
+func (s *StateDB) GetContext() sdk.Context {
+	return s.ctx
+}
+
+// GetCacheContext returns the stateDB CacheContext.
+func (s *StateDB) GetCacheContext() (sdk.Context, error) {
+	if s.writeCache == nil {
+		err := s.cache()
+		if err != nil {
+			return s.ctx, err
+		}
+	}
+	return s.cacheCtx, nil
+}
+
+// MultiStoreSnapshot returns a copy of the stateDB CacheMultiStore.
+func (s *StateDB) MultiStoreSnapshot() sdk.CacheMultiStore {
+	if s.writeCache == nil {
+		err := s.cache()
+		if err != nil {
+			return s.ctx.MultiStore().CacheMultiStore()
+		}
+	}
+	// the cacheCtx multi store is already a CacheMultiStore
+	// so we need to pass a copy of the current state of it
+	cms := s.cacheCtx.MultiStore().(sdk.CacheMultiStore)
+	snapshot := cms.Copy()
+
+	return snapshot
+}
+
+// cache creates the stateDB cache context
+func (s *StateDB) cache() error {
+	if s.ctx.MultiStore() == nil {
+		return errors.New("ctx has no multi store")
+	}
+	s.cacheCtx, s.writeCache = s.ctx.CacheContext()
+	return nil
 }
 
 // AddLog adds a log, called by evm.
@@ -302,6 +357,22 @@ func (s *StateDB) setStateObject(object *stateObject) {
  * SETTERS
  */
 
+// AddPrecompileFn adds a precompileCall journal entry
+// with a snapshot of the multi-store and events previous
+// to the precompile call.
+func (s *StateDB) AddPrecompileFn(addr common.Address, cms sdk.CacheMultiStore, events sdk.Events) error {
+	stateObject := s.getOrNewStateObject(addr)
+	if stateObject == nil {
+		return fmt.Errorf("could not add precompile call to address %s. State object not found", addr)
+	}
+	stateObject.AddPrecompileFn(cms, events)
+	s.precompileCallsCounter++
+	if s.precompileCallsCounter > MaxPrecompileCalls {
+		return fmt.Errorf("max calls to precompiles (%d) reached", MaxPrecompileCalls)
+	}
+	return nil
+}
+
 // AddBalance adds amount to the account associated with addr.
 func (s *StateDB) AddBalance(addr common.Address, amount *big.Int) {
 	stateObject := s.getOrNewStateObject(addr)
@@ -451,17 +522,35 @@ func (s *StateDB) RevertToSnapshot(revid int) {
 // Commit writes the dirty states to keeper
 // the StateDB object should be discarded after committed.
 func (s *StateDB) Commit() error {
+	// writeCache func will exist only when there's a call to a precompile.
+	// It applies all the store updates preformed by precompile calls.
+	if s.writeCache != nil {
+		s.writeCache()
+	}
+	return s.commitWithCtx(s.ctx)
+}
+
+// CommitWithCacheCtx writes the dirty states to keeper using the cacheCtx.
+// This function is used before any precompile call to make sure the cacheCtx
+// is updated with the latest changes within the tx (StateDB's journal entries).
+func (s *StateDB) CommitWithCacheCtx() error {
+	return s.commitWithCtx(s.cacheCtx)
+}
+
+// commitWithCtx writes the dirty states to keeper
+// using the provided context
+func (s *StateDB) commitWithCtx(ctx sdk.Context) error {
 	for _, addr := range s.journal.sortedDirties() {
 		obj := s.stateObjects[addr]
 		if obj.suicided {
-			if err := s.keeper.DeleteAccount(s.ctx, obj.Address()); err != nil {
+			if err := s.keeper.DeleteAccount(ctx, obj.Address()); err != nil {
 				return errorsmod.Wrap(err, "failed to delete account")
 			}
 		} else {
 			if obj.code != nil && obj.dirtyCode {
-				s.keeper.SetCode(s.ctx, obj.CodeHash(), obj.code)
+				s.keeper.SetCode(ctx, obj.CodeHash(), obj.code)
 			}
-			if err := s.keeper.SetAccount(s.ctx, obj.Address(), obj.account); err != nil {
+			if err := s.keeper.SetAccount(ctx, obj.Address(), obj.account); err != nil {
 				return errorsmod.Wrap(err, "failed to set account")
 			}
 			for _, key := range obj.dirtyStorage.SortedKeys() {
@@ -470,7 +559,7 @@ func (s *StateDB) Commit() error {
 				if value == obj.originStorage[key] {
 					continue
 				}
-				s.keeper.SetState(s.ctx, obj.Address(), key, value.Bytes())
+				s.keeper.SetState(ctx, obj.Address(), key, value.Bytes())
 			}
 		}
 	}

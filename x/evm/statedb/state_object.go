@@ -20,6 +20,7 @@ import (
 	"math/big"
 	"sort"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
@@ -133,6 +134,16 @@ func (s *stateObject) SetBalance(amount *big.Int) {
 		prev:    new(big.Int).Set(s.account.Balance),
 	})
 	s.setBalance(amount)
+}
+
+// AddPrecompileFn appends to the journal an entry
+// with a snapshot of the multi-store and events
+// previous to the precompile call
+func (s *stateObject) AddPrecompileFn(cms sdk.CacheMultiStore, events sdk.Events) {
+	s.db.journal.append(precompileCallChange{
+		multiStore: cms,
+		events:     events,
+	})
 }
 
 func (s *stateObject) setBalance(amount *big.Int) {
