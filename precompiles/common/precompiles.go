@@ -1,6 +1,9 @@
 package common
 
 import (
+	"bytes"
+	"embed"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -341,11 +344,31 @@ func (p Precompile) standardCallData(contract *vm.Contract) (method *abi.Method,
 	return method, nil
 }
 
-// func ExtractMethodID(input []byte) ([]byte, error) {
-// 	// Check if the input has at least the length needed for methodID
-// 	if len(input) < 4 {
-// 		return nil, vm.ErrExecutionReverted
-// 		// return nil, errors.New("input too short to extract method ID")
-// 	}
-// 	return input[:4], nil
-// }
+func MustGetABI(f embed.FS, filename string) abi.ABI {
+	abiBz, err := f.ReadFile(filename)
+	if err != nil {
+		panic(err)
+	}
+
+	newAbi, err := abi.JSON(bytes.NewReader(abiBz))
+	if err != nil {
+		panic(err)
+	}
+	return newAbi
+}
+
+func ValidateArgsLength(args []interface{}, length int) error {
+	if len(args) != length {
+		return fmt.Errorf("expected %d arguments but got %d", length, len(args))
+	}
+
+	return nil
+}
+
+func ValidateNonPayable(value *big.Int) error {
+	if value != nil && value.Sign() != 0 {
+		return errors.New("sending funds to a non-payable function")
+	}
+
+	return nil
+}
