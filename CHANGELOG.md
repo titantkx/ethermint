@@ -37,6 +37,12 @@ Ref: https://keepachangelog.com/en/1.0.0/
 
 ## Unreleased
 
+## [v0.24.2]
+
+### API Breaking
+
+- (precompile) remove stateDB param from `PrecompileExecutor` interface
+
 ## [v0.24.1]
 
 ### API Breaking
