@@ -145,6 +145,10 @@ func (k Keeper) ChainID() *big.Int {
 	return k.eip155ChainID
 }
 
+func (k *Keeper) SetCustomPrecompiles(customPrecompiles evm.PrecompiledContracts) {
+	k.customPrecompiles = customPrecompiles
+}
+
 // ----------------------------------------------------------------------------
 // Block Bloom
 // Required by Web3 API.

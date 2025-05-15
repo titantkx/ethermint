@@ -48,6 +48,10 @@ Ref: https://keepachangelog.com/en/1.0.0/
 - (precompile) add evm param for `PrecompileExecutor` interface
 - (precompile) remove stateDB param from `PrecompileExecutor` interface
 
+### Feature
+
+- (x/evm/keeper) add method `SetCustomPrecompiles`
+
 ## [v0.23.0]
 
 ### State Machine Breaking
