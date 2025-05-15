@@ -37,23 +37,16 @@ Ref: https://keepachangelog.com/en/1.0.0/
 
 ## Unreleased
 
-## [v0.24.2]
-
-### API Breaking
-
-- (precompile) remove stateDB param from `PrecompileExecutor` interface
-
-## [v0.24.1]
-
-### API Breaking
-
-- (precompile) add evm param for `PrecompileExecutor` interface
-
 ## [v0.24.0]
 
 ### State Machine Breaking
 
 - Support custom pre compiled contracts in EVM module
+
+### API Breaking
+
+- (precompile) add evm param for `PrecompileExecutor` interface
+- (precompile) remove stateDB param from `PrecompileExecutor` interface
 
 ## [v0.23.0]
 
