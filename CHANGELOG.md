@@ -37,6 +37,12 @@ Ref: https://keepachangelog.com/en/1.0.0/
 
 ## Unreleased
 
+## [v0.24.1]
+
+### API Breaking
+
+- (precompile) add evm param for `PrecompileExecutor` interface
+
 ## [v0.24.0]
 
 ### State Machine Breaking

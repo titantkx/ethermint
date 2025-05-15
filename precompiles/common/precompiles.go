@@ -55,6 +55,7 @@ type PrecompileExecutor interface {
 
 	Execute(
 		ctx sdk.Context,
+		evm *vm.EVM,
 		stateDB vm.StateDB,
 		method *abi.Method,
 		caller common.Address,
@@ -218,7 +219,7 @@ func (p Precompile) Run(
 	defer HandleGasError(ctx, contract, initialGas, initialGasLimit, &err)()
 
 	// execute the precompile contract
-	bz, err = p.executor.Execute(ctx, stateDB, method, sender, callingContract, args, value, readOnly, isFromDelegateCall)
+	bz, err = p.executor.Execute(ctx, evm, stateDB, method, sender, callingContract, args, value, readOnly, isFromDelegateCall)
 	if err != nil {
 		return nil, err
 	}
