@@ -10,7 +10,7 @@ import (
 	storetypes "github.com/cosmos/cosmos-sdk/store/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/titantkx/ethermint/x/evm/statedb"
 )
@@ -31,12 +31,12 @@ const (
 )
 
 type balanceChangeEntry struct {
-	Account common.Address
+	Account ethcommon.Address
 	Amount  *big.Int
 	Op      Operation
 }
 
-func NewBalanceChangeEntry(acc common.Address, amt *big.Int, op Operation) balanceChangeEntry { //nolint:revive
+func NewBalanceChangeEntry(acc ethcommon.Address, amt *big.Int, op Operation) balanceChangeEntry { //nolint:revive
 	return balanceChangeEntry{acc, amt, op}
 }
 
@@ -55,7 +55,7 @@ type PrecompileExecutor interface {
 		ctx sdk.Context,
 		evm *vm.EVM,
 		method *abi.Method,
-		caller common.Address,
+		caller ethcommon.Address,
 		callingContract vm.ContractRef,
 		args []interface{},
 		value *big.Int,
@@ -68,7 +68,7 @@ var _ vm.PrecompiledContract = &Precompile{}
 
 type Precompile struct {
 	abi.ABI
-	address        common.Address
+	address        ethcommon.Address
 	journalEntries []balanceChangeEntry
 
 	executor PrecompileExecutor
@@ -76,7 +76,7 @@ type Precompile struct {
 
 func NewPrecompile(
 	abi abi.ABI,
-	address common.Address,
+	address ethcommon.Address,
 	executor PrecompileExecutor,
 ) *Precompile {
 	return &Precompile{
@@ -193,7 +193,7 @@ func HandleGasError(ctx sdk.Context, contract *vm.Contract, initialGas storetype
 func (p Precompile) Run(
 	evm *vm.EVM,
 	contract *vm.Contract,
-	sender common.Address,
+	sender ethcommon.Address,
 	callingContract vm.ContractRef,
 	input []byte, //nolint:revive
 	value *big.Int,
@@ -259,11 +259,11 @@ func (p *Precompile) SetBalanceChangeEntries(entries ...balanceChangeEntry) {
 	p.journalEntries = entries
 }
 
-func (p Precompile) Address() common.Address {
+func (p Precompile) Address() ethcommon.Address {
 	return p.address
 }
 
-func (p *Precompile) SetAddress(addr common.Address) {
+func (p *Precompile) SetAddress(addr ethcommon.Address) {
 	p.address = addr
 }
 
@@ -374,4 +374,14 @@ func ValidateNonPayable(value *big.Int) error {
 	}
 
 	return nil
+}
+
+func GetCosmosAddressFromEVMAddressArg(arg interface{}) (sdk.AccAddress, error) {
+	evmAddr, ok := arg.(ethcommon.Address)
+	if !ok || evmAddr == (ethcommon.Address{}) {
+		return nil, fmt.Errorf("invalid EVM address: %v", arg)
+	}
+	cosmosAddr := sdk.AccAddress(evmAddr.Bytes())
+
+	return cosmosAddr, nil
 }
