@@ -267,6 +267,17 @@ func (p *Precompile) SetAddress(addr common.Address) {
 	p.address = addr
 }
 
+func (p Precompile) GetMethodIDByName(name string) (methodId []byte, err error) {
+	for methodName, m := range p.ABI.Methods {
+		if methodName == name {
+			methodId = m.ID
+			return methodId, nil
+		}
+	}
+
+	return nil, fmt.Errorf("method not found: %s", name)
+}
+
 func (p Precompile) getMethod(contract *vm.Contract) (method *abi.Method, err error) {
 	// NOTE: This is a special case where the calling transaction does not specify a function name.
 	// In this case we default to a `fallback` or `receive` function on the contract.

@@ -51,6 +51,7 @@ Ref: https://keepachangelog.com/en/1.0.0/
 ### Feature
 
 - (x/evm/keeper) add method `SetCustomPrecompiles`
+- (precompile/common) add `GetMethodIDByName` method
 
 ### Improvements
 
