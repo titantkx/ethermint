@@ -52,6 +52,10 @@ Ref: https://keepachangelog.com/en/1.0.0/
 
 - (x/evm/keeper) add method `SetCustomPrecompiles`
 
+### Improvements
+
+- (precompile) remove uneffect code in `HandleGasError`. No need to set back `GasMeter` for `ctx`
+
 ## [v0.23.0]
 
 ### State Machine Breaking

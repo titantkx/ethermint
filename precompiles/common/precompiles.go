@@ -13,8 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/titantkx/ethermint/x/evm/statedb"
-
-	"github.com/titantkx/ethermint/types"
 )
 
 const UnknownMethodCallGas uint64 = 3000
@@ -117,23 +115,20 @@ func (p Precompile) Prepare(
 	s snapshot, //nolint:revive
 	method *abi.Method,
 	initialGas storetypes.Gas,
-	initialGasLimit storetypes.Gas,
 	args []interface{},
 	err error,
 ) {
 	stateDB, ok := evm.StateDB.(*statedb.StateDB)
 	if !ok {
 		//nolint
-		return sdk.Context{}, nil, s, nil, uint64(0), uint64(0), nil, fmt.Errorf(ErrNotRunInEvm)
+		return sdk.Context{}, nil, s, nil, uint64(0), nil, fmt.Errorf(ErrNotRunInEvm)
 	}
 
 	// get the stateDB cache ctx
 	ctx, err = stateDB.GetCacheContext()
 	if err != nil {
-		return sdk.Context{}, nil, s, nil, uint64(0), uint64(0), nil, err
+		return sdk.Context{}, nil, s, nil, uint64(0), nil, err
 	}
-
-	initialGasLimit = ctx.GasMeter().Limit()
 
 	// take a snapshot of the current state before any changes
 	// to be able to revert the changes
@@ -143,12 +138,12 @@ func (p Precompile) Prepare(
 	// commit the current changes in the cache ctx
 	// to get the updated state for the precompile call
 	if err := stateDB.CommitWithCacheCtx(); err != nil {
-		return sdk.Context{}, nil, s, nil, uint64(0), initialGasLimit, nil, err
+		return sdk.Context{}, nil, s, nil, uint64(0), nil, err
 	}
 
 	method, err = p.getMethod(contract)
 	if err != nil {
-		return sdk.Context{}, nil, s, nil, uint64(0), initialGasLimit, nil, err
+		return sdk.Context{}, nil, s, nil, uint64(0), nil, err
 	}
 
 	// if the method type is `function` continue looking for arguments
@@ -156,13 +151,13 @@ func (p Precompile) Prepare(
 		argsBz := contract.Input[4:]
 		args, err = method.Inputs.Unpack(argsBz)
 		if err != nil {
-			return sdk.Context{}, nil, s, nil, uint64(0), initialGasLimit, nil, err
+			return sdk.Context{}, nil, s, nil, uint64(0), nil, err
 		}
 	}
 
 	initialGas = ctx.GasMeter().GasConsumed()
 
-	defer HandleGasError(ctx, contract, initialGas, initialGasLimit, &err)()
+	defer HandleGasError(ctx, contract, initialGas, &err)()
 
 	// set the default SDK gas configuration to track gas usage
 	// we are changing the gas meter type, so it panics gracefully when out of gas
@@ -173,12 +168,12 @@ func (p Precompile) Prepare(
 	// we need to consume the gas that was already used by the EVM
 	ctx.GasMeter().ConsumeGas(initialGas, "creating a new gas meter")
 
-	return ctx, stateDB, s, method, initialGas, initialGasLimit, args, nil
+	return ctx, stateDB, s, method, initialGas, args, nil
 }
 
 // HandleGasError handles the out of gas panic by resetting the gas meter and returning an error.
 // This is used in order to avoid panics and to allow for the EVM to continue cleanup if the tx or query run out of gas.
-func HandleGasError(ctx sdk.Context, contract *vm.Contract, initialGas storetypes.Gas, initialGasLimit storetypes.Gas, err *error) func() {
+func HandleGasError(ctx sdk.Context, contract *vm.Contract, initialGas storetypes.Gas, err *error) func() {
 	return func() {
 		if r := recover(); r != nil {
 			switch r.(type) {
@@ -188,9 +183,6 @@ func HandleGasError(ctx sdk.Context, contract *vm.Contract, initialGas storetype
 				_ = contract.UseGas(usedGas)
 
 				*err = vm.ErrOutOfGas
-				// use InfiniteGasMeter with previous Gas limit.
-				ctx = ctx.WithGasMeter(types.NewInfiniteGasMeterWithLimit(initialGasLimit))
-				ctx.GasMeter().ConsumeGas(usedGas+initialGas, "change back to InfiniteGasMeter")
 			default:
 				panic(r)
 			}
@@ -208,14 +200,14 @@ func (p Precompile) Run(
 	readOnly bool,
 	isFromDelegateCall bool,
 ) (bz []byte, err error) {
-	ctx, stateDB, snapshot, method, initialGas, initialGasLimit, args, err := p.Prepare(evm, contract)
+	ctx, stateDB, snapshot, method, initialGas, args, err := p.Prepare(evm, contract)
 	if err != nil {
 		return nil, err
 	}
 
 	// This handles any out of gas errors that may occur during the execution of a precompile tx or query.
 	// It avoids panics and returns the out of gas error so the EVM can continue gracefully.
-	defer HandleGasError(ctx, contract, initialGas, initialGasLimit, &err)()
+	defer HandleGasError(ctx, contract, initialGas, &err)()
 
 	// execute the precompile contract
 	bz, err = p.executor.Execute(ctx, evm, method, sender, callingContract, args, value, readOnly, isFromDelegateCall)
