@@ -442,7 +442,8 @@ func (k *Keeper) RunWithOneOffEVMInstance(
 		return errorsmod.Wrap(err, "failed to load evm config")
 	}
 
-	txConfig := k.TxConfig(ctx, common.Hash{})
+	// txConfig := k.TxConfig(ctx, common.Hash{})
+	txConfig := statedb.NewEmptyTxConfig(common.BytesToHash(ctx.HeaderHash()))
 	stateDB := statedb.New(ctx, k, txConfig)
 
 	blockCtx := k.GetVMBlockContext(ctx, cfg)
