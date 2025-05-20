@@ -34,6 +34,7 @@ type StatefulPrecompiledContract interface {
 
 // EVM defines the interface for the Ethereum Virtual Machine used by the EVM module.
 type EVM interface {
+	VM() *vm.EVM
 	Config() vm.Config
 	Context() vm.BlockContext
 	TxContext() vm.TxContext

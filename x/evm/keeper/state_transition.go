@@ -45,14 +45,8 @@ import (
 // RANDAO implementation. See https://github.com/titantkx/ethermint/pull/1520#pullrequestreview-1200504697
 // for more information.
 
-func (k *Keeper) NewEVM(
-	ctx sdk.Context,
-	msg core.Message,
-	cfg *statedb.EVMConfig,
-	tracer vm.EVMLogger,
-	stateDB vm.StateDB,
-) evm.EVM {
-	blockCtx := vm.BlockContext{
+func (k Keeper) GetVMBlockContext(ctx sdk.Context, cfg *statedb.EVMConfig) vm.BlockContext {
+	return vm.BlockContext{
 		CanTransfer: core.CanTransfer,
 		Transfer:    core.Transfer,
 		GetHash:     k.GetHashFn(ctx),
@@ -64,6 +58,16 @@ func (k *Keeper) NewEVM(
 		BaseFee:     cfg.BaseFee,
 		Random:      nil, // not supported
 	}
+}
+
+func (k *Keeper) NewEVM(
+	ctx sdk.Context,
+	msg core.Message,
+	cfg *statedb.EVMConfig,
+	tracer vm.EVMLogger,
+	stateDB vm.StateDB,
+) evm.EVM {
+	blockCtx := k.GetVMBlockContext(ctx, cfg)
 
 	txCtx := core.NewEVMTxContext(msg)
 	if tracer == nil {
@@ -428,4 +432,36 @@ func (k *Keeper) ApplyMessageWithConfig(ctx sdk.Context,
 		Logs:    types.NewLogsFromEth(stateDB.Logs()),
 		Hash:    txConfig.TxHash.Hex(),
 	}, nil
+}
+
+func (k *Keeper) RunWithOneOffEVMInstance(
+	ctx sdk.Context, from common.Address, gas *big.Int, runner func(*vm.EVM) error,
+) error {
+	cfg, err := k.EVMConfig(ctx, sdk.ConsAddress(ctx.BlockHeader().ProposerAddress), k.eip155ChainID)
+	if err != nil {
+		return errorsmod.Wrap(err, "failed to load evm config")
+	}
+
+	txConfig := k.TxConfig(ctx, common.Hash{})
+	stateDB := statedb.New(ctx, k, txConfig)
+
+	blockCtx := k.GetVMBlockContext(ctx, cfg)
+
+	// txCtx := core.NewEVMTxContext(msg)
+	txCtx := vm.TxContext{
+		Origin:   from,
+		GasPrice: new(big.Int).Set(gas),
+	}
+
+	vmConfig := k.VMConfig(ctx, nil, cfg, types.NewNoOpTracer())
+	evm := k.evmConstructor(blockCtx, txCtx, stateDB, cfg.ChainConfig, vmConfig, k.customPrecompiles)
+
+	if err := runner(evm.VM()); err != nil {
+		return err
+	}
+	if err := stateDB.Commit(); err != nil {
+		return errorsmod.Wrap(err, "failed to commit stateDB")
+	}
+
+	return nil
 }

@@ -49,6 +49,10 @@ func NewEVM(
 	}
 }
 
+func (e EVM) VM() *vm.EVM {
+	return e.EVM
+}
+
 // Context returns the EVM's Block Context
 func (e EVM) Context() vm.BlockContext {
 	return e.EVM.Context
