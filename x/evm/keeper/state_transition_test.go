@@ -1,6 +1,7 @@
 package keeper_test
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -14,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/titantkx/ethermint/tests"
 	"github.com/titantkx/ethermint/x/evm/keeper"
@@ -718,4 +720,15 @@ func (suite *KeeperTestSuite) TestGetProposerAddress() {
 			suite.Require().Equal(tc.expAdr, keeper.GetProposerAddress(suite.ctx, tc.adr))
 		})
 	}
+}
+
+func (suite *KeeperTestSuite) TestRunWithOneOffEVMInstance() {
+	errRunner := func(*vm.EVM) error { return errors.New("test") }
+	err := suite.app.EvmKeeper.RunWithOneOffEVMInstance(suite.ctx, suite.address, errRunner)
+	suite.Require().NotNil(err)
+	suite.Require().Equal("test", err.Error())
+
+	successRunner := func(*vm.EVM) error { return nil }
+	err = suite.app.EvmKeeper.RunWithOneOffEVMInstance(suite.ctx, suite.address, successRunner)
+	suite.Require().Nil(err)
 }

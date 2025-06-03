@@ -434,7 +434,7 @@ func (k *Keeper) ApplyMessageWithConfig(ctx sdk.Context,
 }
 
 func (k *Keeper) RunWithOneOffEVMInstance(
-	ctx sdk.Context, from common.Address, gas *big.Int, runner func(*vm.EVM) error,
+	ctx sdk.Context, from common.Address, runner func(*vm.EVM) error,
 ) error {
 	cfg, err := k.EVMConfig(ctx, sdk.ConsAddress(ctx.BlockHeader().ProposerAddress), k.eip155ChainID)
 	if err != nil {
@@ -450,7 +450,7 @@ func (k *Keeper) RunWithOneOffEVMInstance(
 	// txCtx := core.NewEVMTxContext(msg)
 	txCtx := vm.TxContext{
 		Origin:   from,
-		GasPrice: new(big.Int).Set(gas),
+		GasPrice: common.Big0,
 	}
 
 	vmConfig := k.VMConfig(ctx, nil, cfg, types.NewNoOpTracer())
