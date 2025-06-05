@@ -48,11 +48,16 @@ Ref: https://keepachangelog.com/en/1.0.0/
 - (precompile) add evm param for `PrecompileExecutor` interface
 - (precompile) remove stateDB param from `PrecompileExecutor` interface
 
+### Bug Fixes
+
+- (x/evm): remove duplicate EmitEvents. it already done in commit
+
 ### Feature
 
 - (x/evm/keeper) add method `SetCustomPrecompiles`
 - (precompile/common) add `GetMethodIDByName` method
 - (precompile/common) add `GetCosmosAddressFromEVMAddressArg` method
+- (x/evm): support `RunWithOneOffEVMInstance`
 
 ### Improvements
 
