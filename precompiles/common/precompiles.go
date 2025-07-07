@@ -200,6 +200,9 @@ func (p Precompile) Run(
 	readOnly bool,
 	isFromDelegateCall bool,
 ) (bz []byte, err error) {
+	if evm == nil {
+		return nil, errors.New("evm context is nil")
+	}
 	ctx, stateDB, snapshot, method, initialGas, args, err := p.Prepare(evm, contract)
 	if err != nil {
 		return nil, err
@@ -225,7 +228,7 @@ func (p Precompile) Run(
 		return nil, err
 	}
 
-	// @todo maybe we need to use InfiniteGasMeter with previous Gas limit here
+	// NOTE: no need to use InfiniteGasMeter with previous Gas limit here because GasMeter change in new context not effect the original context
 
 	return bz, nil
 }
