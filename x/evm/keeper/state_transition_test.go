@@ -723,12 +723,20 @@ func (suite *KeeperTestSuite) TestGetProposerAddress() {
 }
 
 func (suite *KeeperTestSuite) TestRunWithOneOffEVMInstance() {
-	errRunner := func(*vm.EVM) error { return errors.New("test") }
+	errRunner := func(
+		vm *vm.EVM,
+	) error {
+		suite.Require().NotNil(vm)
+		return errors.New("test")
+	}
 	err := suite.app.EvmKeeper.RunWithOneOffEVMInstance(suite.ctx, suite.address, errRunner)
 	suite.Require().NotNil(err)
 	suite.Require().Equal("test", err.Error())
 
-	successRunner := func(*vm.EVM) error { return nil }
+	successRunner := func(vm *vm.EVM) error {
+		suite.Require().NotNil(vm)
+		return nil
+	}
 	err = suite.app.EvmKeeper.RunWithOneOffEVMInstance(suite.ctx, suite.address, successRunner)
 	suite.Require().Nil(err)
 }
