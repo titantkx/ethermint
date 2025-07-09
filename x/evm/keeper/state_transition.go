@@ -433,6 +433,8 @@ func (k *Keeper) ApplyMessageWithConfig(ctx sdk.Context,
 	}, nil
 }
 
+// This function is used to run a one-off EVM instance with a custom runner function.
+// normally, this is used for cosmos txs that are not related to the EVM, but need to run some EVM code.
 func (k *Keeper) RunWithOneOffEVMInstance(
 	ctx sdk.Context, from common.Address, runner func(*vm.EVM) error,
 ) error {
